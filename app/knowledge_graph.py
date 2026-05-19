@@ -2,15 +2,15 @@ import re
 from collections import defaultdict
 from typing import List, Dict, Tuple
 
-# -----------------------------
+
 # KNOWLEDGE GRAPH STRUCTURE
-# -----------------------------
+
 # GRAPH[entity] = set of (relation, object)
 GRAPH: Dict[str, set] = defaultdict(set)
 
-# -----------------------------
+
 # ENTITY EXTRACTION (SYMBOLIC)
-# -----------------------------
+
 def extract_entities(text: str) -> List[str]:
     """
     Extract candidate entities using symbolic heuristics.
@@ -34,9 +34,9 @@ def extract_entities(text: str) -> List[str]:
 
     return list(entities)
 
-# -----------------------------
+
 # RELATION EXTRACTION (RULE-BASED)
-# -----------------------------
+
 def extract_relations(text: str, entities: List[str]) -> List[Tuple[str, str, str]]:
     """
     Extract relations using symbolic rules.
@@ -64,9 +64,9 @@ def extract_relations(text: str, entities: List[str]) -> List[Tuple[str, str, st
 
     return relations
 
-# -----------------------------
+
 # GRAPH BUILDER
-# -----------------------------
+
 def build_graph_from_text(text: str) -> None:
     """
     Build / update knowledge graph from input text.
@@ -77,18 +77,18 @@ def build_graph_from_text(text: str) -> None:
     for subj, rel, obj in relations:
         GRAPH[subj].add((rel, obj))
 
-# -----------------------------
+
 # GRAPH QUERY
-# -----------------------------
+
 def query_graph(entity: str) -> List[Tuple[str, str]]:
     """
     Return relations for an entity.
     """
     return list(GRAPH.get(entity, []))
 
-# -----------------------------
+
 # SYMBOLIC REASONING OVER GRAPH
-# -----------------------------
+
 def infer_facts(entity: str) -> List[str]:
     """
     Perform simple symbolic inference.
@@ -106,9 +106,9 @@ def infer_facts(entity: str) -> List[str]:
 
     return inferred
 
-# -----------------------------
+
 # EXPLAINABLE GRAPH TRACE
-# -----------------------------
+
 def explain_graph(entity: str) -> str:
     """
     Human-readable explanation of KG reasoning.
