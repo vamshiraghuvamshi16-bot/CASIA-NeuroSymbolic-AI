@@ -1,8 +1,8 @@
 import os
-import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer
 from groq import Groq
+import chromadb
 
 from app.web_search import web_search
 
@@ -11,47 +11,73 @@ from app.web_search import web_search
 # =================================================
 embedder = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
-faiss_index = None
+# =================================================
+# CHROMADB SETUP (replaces faiss)
+# =================================================
+_chroma_client = chromadb.Client()
+_collection = _chroma_client.get_or_create_collection(
+    name="casia_docs",
+    metadata={"hnsw:space": "l2"}
+)
+
 doc_chunks = []
 
 # =================================================
 # DOCUMENT INGEST
 # =================================================
 def ingest_document(text: str):
-    global faiss_index, doc_chunks
+    global doc_chunks
 
-    faiss_index = faiss.IndexFlatL2(384)
-    doc_chunks = []
+    # Clear existing collection
+    try:
+        _chroma_client.delete_collection("casia_docs")
+    except Exception:
+        pass
 
-    chunks = [text[i:i + 500] for i in range(0, len(text), 500)]
-    vectors = embedder.encode(chunks)
+    collection = _chroma_client.get_or_create_collection(
+        name="casia_docs",
+        metadata={"hnsw:space": "l2"}
+    )
 
-    faiss_index.add(np.array(vectors, dtype="float32"))
-    doc_chunks = chunks
+    doc_chunks = [text[i:i + 500] for i in range(0, len(text), 500)]
+    vectors = embedder.encode(doc_chunks).tolist()
+
+    collection.add(
+        embeddings=vectors,
+        documents=doc_chunks,
+        ids=[f"chunk_{i}" for i in range(len(doc_chunks))]
+    )
 
 
 # =================================================
 # DOCUMENT RETRIEVAL
 # =================================================
 def retrieve_from_docs(query: str, k=5, threshold=1.1):
-    if faiss_index is None:
+    try:
+        collection = _chroma_client.get_collection("casia_docs")
+    except Exception:
         return []
 
-    q_vec = embedder.encode([query])
-    distances, indices = faiss_index.search(
-        np.array(q_vec, dtype="float32"), k
+    if collection.count() == 0:
+        return []
+
+    q_vec = embedder.encode([query]).tolist()
+
+    results = collection.query(
+        query_embeddings=q_vec,
+        n_results=min(k, collection.count())
     )
 
-    results = []
-    for d, i in zip(distances[0], indices[0]):
-        if d <= threshold and i < len(doc_chunks):
-            results.append(doc_chunks[i])
+    matched = []
+    for doc, distance in zip(results["documents"][0], results["distances"][0]):
+        if distance <= threshold:
+            matched.append(doc)
 
-    return results
+    return matched
 
 
 # =================================================
-# 🔥 ORCHESTRATOR (RAG + SYMBOLIC + FORCE RULES)
+# ORCHESTRATOR (RAG + SYMBOLIC + FORCE RULES)
 # =================================================
 def orchestrate(
     user_id: str,
@@ -93,7 +119,7 @@ def orchestrate(
     system_prompt = "You are CASIA.\n" + style_hint
 
     # -------------------------------------------------
-    # 🔥 FORCE-RULE OVERRIDE (ABSOLUTE PRIORITY)
+    # FORCE-RULE OVERRIDE (ABSOLUTE PRIORITY)
     # -------------------------------------------------
     if force_explain is True:
         system_prompt += (
@@ -121,10 +147,7 @@ def orchestrate(
         mode = "DOCUMENT_SUMMARY"
 
     else:
-        if disable_web:
-            context = ""
-        else:
-            context = web_search(query)[:3000]
+        context = "" if disable_web else web_search(query)[:3000]
         mode = "GENERAL"
 
     # -------------------------------------------------
